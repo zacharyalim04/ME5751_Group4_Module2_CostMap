@@ -5,6 +5,7 @@ from E160_state import *
 from E160_robot import *
 import math
 import time
+import matplotlib.pyplot as plt
 
 
 class controller:
@@ -15,6 +16,10 @@ class controller:
 		self.ka = 0  # k_alpha
 		self.kb = 0  # k_beta
 		self.logging = logging
+
+		# Create lists for plotting
+		self.path_x = []
+		self.path_y = []
 
 		if(logging == True):
 			self.robot.make_headers(['pos_X','posY','posZ','vix','viy','wi','vr','wr'])
@@ -92,9 +97,9 @@ class controller:
 			betaError = math.atan2(math.sin(betaError), math.cos(betaError)) # Normalize to -pi to pi
 
 			# Gains
-			self.kp = 0.5  # k_rho
-			self.ka = 1.5  # k_alpha
-			self.kb = -0.6  # k_beta
+			self.kp = 2  # k_rho
+			self.ka = 4  # k_alpha
+			self.kb = -2  # k_beta
 			c_v = self.kp*rho
 			c_w = self.ka*alphaError + self.kb*betaError
 
@@ -111,6 +116,10 @@ class controller:
 				c_w = w_max
 			elif c_w<-w_max:
 				c_w = -w_max
+
+			# Update path lists
+			self.path_x.append(c_posX)
+			self.path_y.append(c_posY)
 
 			# Robot movement
 			if rho > 0.2: # Within 0.2
@@ -137,10 +146,20 @@ class controller:
 			self.robot.log_data([c_posX,c_posY,c_theta,c_vix,c_viy,c_wi,c_v,c_w])
 
 
-		if abs(c_posX - d_posX)< 5 and abs(c_theta - d_theta) < 0.2 : #you need to modify the reach way point criteria
+		if abs(c_posX - d_posX)< 0.2 and abs(c_theta - d_theta) < 0.2 : #you need to modify the reach way point criteria
 			if(self.robot.state_des.reach_destination()): 
 				print("final goal reached")
 				self.robot.set_motor_control(.0, .0)  # stop the motor
+				# Create path plot
+				plt.figure()
+				plt.plot(self.path_x, self.path_y, 'b-', label='Test 3 Path')
+				plt.plot(d_posX, d_posY, 'ro', label='Destination')
+				plt.xlabel('X Position')
+				plt.ylabel('Y Position')
+				plt.title('Test 3 Path')
+				plt.grid(True)
+				plt.axis("equal")
+				plt.show(block=True)
 				return True
 			else:
 				print("one goal point reached, continute to next goal point")
