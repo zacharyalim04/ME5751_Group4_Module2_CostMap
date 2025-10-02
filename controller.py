@@ -5,7 +5,7 @@ from E160_state import *
 from E160_robot import *
 import math
 import time
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 
 
 class controller:
@@ -18,8 +18,8 @@ class controller:
 		self.logging = logging
 
 		# Create lists for plotting
-		self.path_x = []
-		self.path_y = []
+		# self.path_x = []
+		# self.path_y = []
 
 		if(logging == True):
 			self.robot.make_headers(['pos_X','posY','posZ','vix','viy','wi','vr','wr'])
@@ -118,8 +118,8 @@ class controller:
 				c_w = -w_max
 
 			# Update path lists
-			self.path_x.append(c_posX)
-			self.path_y.append(c_posY)
+			# self.path_x.append(c_posX)
+			# self.path_y.append(c_posY)
 
 			# Robot movement
 			if rho > 0.2: # Within 0.2
@@ -151,15 +151,15 @@ class controller:
 				print("final goal reached")
 				self.robot.set_motor_control(.0, .0)  # stop the motor
 				# Create path plot
-				plt.figure()
-				plt.plot(self.path_x, self.path_y, 'b-', label='Test 3 Path')
-				plt.plot(d_posX, d_posY, 'ro', label='Destination')
-				plt.xlabel('X Position')
-				plt.ylabel('Y Position')
-				plt.title('Test 3 Path')
-				plt.grid(True)
-				plt.axis("equal")
-				plt.show(block=True)
+				# plt.figure()
+				# plt.plot(self.path_x, self.path_y, 'b-', label='Test 3 Path')
+				# plt.plot(d_posX, d_posY, 'ro', label='Destination')
+				# plt.xlabel('X Position')
+				# plt.ylabel('Y Position')
+				# plt.title('Test 3 Path')
+				# plt.grid(True)
+				# plt.axis("equal")
+				# plt.show(block=True)
 				return True
 			else:
 				print("one goal point reached, continute to next goal point")
