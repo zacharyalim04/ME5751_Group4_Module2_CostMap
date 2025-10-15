@@ -3,6 +3,7 @@ import numpy as np
 import math
 from PIL import Image, ImageTk
 from queue import Queue
+from collections import deque
 
 class cost_map:
 	def __init__(self,graphics):
@@ -75,19 +76,49 @@ class cost_map:
 		'''
 		Your main effort is here. At the end of the program, you shall have a costmap with correct inflation
 		'''
-
-		#self.costmap is initialized same as the map. That is, a white pixel is 255.0 (free), a black pixel is initalized as 0.0 (occupied). 
 		
-		#We first let all black obstacles to be 0 on distmap
+		#self.costmap is initialized same as the map. That is, a white pixel is 255.0 (free), a black pixel is initalized as 0.0 (occupied). 
+
+		# Let all black obstacles to be 0 on distmap and initialize distance map
 		self.distmap[self.map<20.0] = 0
-		# print("there are: "+str(np.sum(self.distmap==0))+ " pixels contain obstacle")
-
+		print("there are: "+str(np.sum(self.distmap==0))+ " pixels contain obstacle")
+		q = deque(np.argwhere(self.distmap == 0)) # Create a queue of (y, x)
+		
 		#It is up to you how to get distmap, you may choose not to use it even
+		#Breadth-First Search
 
+		# Define neighbors
+		directions = [(-1,0),(1,0),(0,-1),(0,1),(-1,-1),(-1,1),(1,-1),(1,1)]
+		
+		# Compute Distances
+		while len(q)>0:
+			y,x = q.popleft()
+			for dy,dx in directions:
+				ny = y + dy
+				nx = x + dx
+				if ny >= 0 and ny < self.map_height and nx >= 0 and nx < self.map_width:
+					if self.distmap[ny,nx] == -1:
+						self.distmap[ny,nx] = self.distmap[y,x] + 1
+						q.append((ny,nx))
 		#just a demo how you generate a costmap, we believe any obstacle pixel (distvalue = 0) has a cost of 255
 		#we also believe all other pixels shall have cost of 128
-		self.costmap[self.distmap==0]=255.0
-		self.costmap[self.distmap!=0]=128.0
+		
+		# Convert Distance to Cost
+		inflation = self.inflation_radius
+		self.costmap = np.zeros_like(self.distmap, dtype=float)
+
+		for y in range(self.map_height):
+			for x in range(self.map_width):
+				d = self.distmap[y,x]
+				if d == 0:
+					self.costmap[y,x] = 255.0 # Define as Obstacle
+				elif d > 0 and d <= inflation:
+					self.costmap[y,x] = 255.0 * (inflation - d) / inflation # Linear Decay
+				else:
+					self.costmap[y,x] = 0.0 # Free Space
+		
+		# Print Inflation Radius
+		print("Costmap computed with inflation radius =", inflation)
 		pass
 
 
