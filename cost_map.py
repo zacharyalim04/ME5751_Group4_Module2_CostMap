@@ -3,7 +3,6 @@ import numpy as np
 import math
 from PIL import Image, ImageTk
 from queue import Queue
-from collections import deque
 
 class cost_map:
 	def __init__(self,graphics):
@@ -20,7 +19,7 @@ class cost_map:
 		# The default map size is 500 x 500 pixel. In case you want a smaller size for debugging, you can change the value of self.scale.
 		
 		try:
-			self.load_map(map = "maps/testmap.png") #load map, put your own map here
+			self.load_map(map = "maps/mapA.png") #load map, put your own map here
 		except:
 			self.graphics.show_map_button.configure(state="disabled")
 			print ("no map loaded") #if fail to find the map png
@@ -29,13 +28,14 @@ class cost_map:
 		self.show_map()
 		self.compute_costmap()
 		self.get_vis_map()
-		self.save_vis_map(map = "maps/test_vis_map2.png")
-		self.save_costmap(file_path= 'maps/test_cost_map2.txt')
+		self.save_vis_map(map = "maps/mapA_vis.png")
+		self.save_costmap(file_path= 'maps/mapA_cost.txt')
+
 
 	#load occupancy grid into self.map
 	#self.map is a numpy 2d array
 	#initialize self.costmap, a numpy 2d array, same as self.map
-	def load_map(self,map="maps/testmap2.png"):
+	def load_map(self,map="maps/mapA.png"):
 		self.map_img = Image.open(map).convert('L')
 		self.map_img = self.map_img.resize((int(self.map_width),int(self.map_height)))
 		# self.graphics.draw_map(map_img=self.map_img)
@@ -50,7 +50,7 @@ class cost_map:
 		self.vis_map=np.copy(self.map) #map for visualization, intialize same as the map
 
 	#save your costmap into a grayscale image
-	def save_vis_map(self,map="maps/vis_map.png"):
+	def save_vis_map(self,map="maps/mapA_vis.png"):
 		save_img = Image.fromarray(self.vis_map)
 		save_img.save(map)
 
@@ -70,64 +70,113 @@ class cost_map:
 	def save_costmap(self, file_path, fmt='%.3f', delimiter='\t'):
 		np.savetxt(file_path, self.costmap, fmt=fmt, delimiter=delimiter)
 
-
-
 	def compute_costmap(self):
+		# we haven't explored anything, so the cost map should be unexplored first
+		self.distmap[:] = -1
+
+		# define thresholds...due to compression in the image, black pixels may appear gray
+		obstacle_th = 20
+		free_th = 220
+
+		self.distmap[self.map < obstacle_th] = 0
+
+		# we need to scan the map/array and collect the values and mark it as either obstacle or free space.
+		height, width = self.map.shape  # assigns height and width of the array to the size of the map using the shape method in numpy
+
+		# queue
+		q = Queue()  # this is for the breadth first search, this is first in first out
+
+		for h in range(height):
+			for w in range(width):
+				current_value = int(self.map[h, w])  # basically takes the current value at any given h,w point in the map
+				if current_value < obstacle_th:
+					self.distmap[h, w] = 0  # set the value of the point that is an obstacle to zero, because the distance to that obstacle is zero
+					q.put((h, w))
+
+		# so far, we took the map and marked all the obstacles and set their distance values to zero
+		neighbors = [(1, 0), (-1, 0), (0, 1), (0, -1)]  # need to define a set of neighbors so that way we can check each opint
+		while not q.empty():
+			h, w = q.get()
+
+			# take our current point
+			d = self.distmap[h, w]  # this gives us our current point
+
+			for dy, dx in neighbors:
+				ny = h + dy  # neighbor height
+				nx = w + dx  # neighbor width
+
+				if ny < 0 or ny >= height:  # this code makes sure it doesn't search out of bounds
+					continue
+				if nx < 0 or nx >= width:
+					continue
+
+				if self.distmap[ny, nx] != -1:  # if its not unexplored, continue
+					continue
+
+				if int(self.map[ny, nx]) <= free_th:  # if it isnt a free pixel, then continue and don't expand into it
+					continue
+
+				# if it isn't an obstacle or is unvisited, then we continue to map this location
+				self.distmap[ny, nx] = d + 1  # the original point +1
+				q.put((ny,nx))  # adds this point into the queue to search from later, so we will revisit this point and then map its neighbors and so on
+
+		# previously, we built a distance map, now we need to use this distance map to make a cost map
+
+		obstacle = 255.0
+		unknown = 150
+		decay = 18
+		self.costmap[:, :] = 0.0  # sets every cell in the COST map to 0, so we can then use the distance map to assign costs
+
+		for h in range(height):
+			for w in range(width):
+				d = int(self.distmap[h, w])  # gets the distance to the nearest obstacle in this specific location
+				if d == 0:
+					self.costmap[h, w] = obstacle  # since the only cell with distance 0 is an obstacle itself, we make it an obstacle
+				elif d == -1:
+					self.costmap[h, w] = unknown
+				elif d <= int(self.inflation_radius):
+					self.costmap[h, w] = obstacle  # essentially, if the distance to the nearest wall is less than or equal to the inflation radius, we mark it as an obstacle too
+				else:
+					dist_beyond = d - int(self.inflation_radius)
+
+					t = dist_beyond / float(max(1, decay)) #the distance beyond the inflation walls becomes a smaller, basically controls the decay factor
+					if t < 0.0:
+						t = 0.0
+					if t > 1.0:
+						t = 1.0
+
+					gamma = 0.6
+					factor = (1.0 - t) ** gamma
+
+					tapered = unknown * factor
+					if tapered >= obstacle:
+						tapered = obstacle - 1.0
+					if tapered < 0.0:
+						tapered = 0.0
+					self.costmap[h, w] = tapered
 		'''
-		Your main effort is here. At the end of the program, you shall have a costmap with correct inflation
-		'''
-		
+#make it binary, all pixels should be obstacle or unknown, since png compresses black pixels and they may become lighter
 		#self.costmap is initialized same as the map. That is, a white pixel is 255.0 (free), a black pixel is initalized as 0.0 (occupied). 
 
-		# Let all black obstacles to be 0 on distmap and initialize distance map
+		#We first let all black obstacles to be 0 on distmap
 		self.distmap[self.map<20.0] = 0
 		print("there are: "+str(np.sum(self.distmap==0))+ " pixels contain obstacle")
-		q = deque(np.argwhere(self.distmap == 0)) # Create a queue of (y, x)
-		
-		#It is up to you how to get distmap, you may choose not to use it even
-		#Breadth-First Search
 
-		# Define neighbors
-		directions = [(-1,0),(1,0),(0,-1),(0,1),(-1,-1),(-1,1),(1,-1),(1,1)]
-		
-		# Compute Distances
-		while len(q)>0:
-			y,x = q.popleft()
-			for dy,dx in directions:
-				ny = y + dy
-				nx = x + dx
-				if ny >= 0 and ny < self.map_height and nx >= 0 and nx < self.map_width:
-					if self.distmap[ny,nx] == -1:
-						self.distmap[ny,nx] = self.distmap[y,x] + 1
-						q.append((ny,nx))
+		#It is up cto you how to get distmap, you may choose not to use it even
+
 		#just a demo how you generate a costmap, we believe any obstacle pixel (distvalue = 0) has a cost of 255
 		#we also believe all other pixels shall have cost of 128
-		
-		# Convert Distance to Cost
-		inflation = self.inflation_radius
-		self.costmap = np.zeros_like(self.distmap, dtype=float)
-
-		for y in range(self.map_height):
-			for x in range(self.map_width):
-				d = self.distmap[y,x]
-				if d == 0:
-					self.costmap[y,x] = 255.0 # Define as Obstacle
-				elif d > 0 and d <= inflation:
-					self.costmap[y,x] = 255.0 * (inflation - d) / inflation # Linear Decay
-				else:
-					self.costmap[y,x] = 0.0 # Free Space
-		
-		# Print Inflation Radius
-		print("Costmap computed with inflation radius =", inflation)
+		#this is where we actually do the code to make the cost map
+		self.costmap[self.distmap==0]=255.0
+		self.costmap[self.distmap!=0]=128.0
 		pass
-
+'''
 
 	#scale costmap to 0 - 255 for visualization
 	def get_vis_map(self):
 		'''
 		get the map for visualization
 		'''
-
 		min_val = min(np.min(self.costmap),0) 
 		max_val = np.max(self.costmap)
 
